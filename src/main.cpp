@@ -1,6 +1,7 @@
 
 #include <Arduino.h>
 
+#include <WifiManager.h>         //https://github.com/tzapu/WiFiManager
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
@@ -8,11 +9,13 @@
 
 const char* ssid = "Ikkefaen";
 const char* password = "Traktor100";
-
+const char* wifiName = "SuperTrippelAP";
 IPAddress serverip(10, 0, 0, 50);
 ESP8266WebServer server(80);
+WiFiManager wifiManager;
 
 const int led = 16;
+
 
 void handleRoot() {
   digitalWrite(LED_BUILTIN, 0);
@@ -25,6 +28,7 @@ void handleOn() {
   digitalWrite(LED_BUILTIN, 0);
   digitalWrite(led, 1);
   server.send(200, "text/plain", "esp8266 turning on!");
+  Serial.println("esp8266 turning on!");
   digitalWrite(LED_BUILTIN, 1);
 }
 
@@ -32,7 +36,17 @@ void handleOff() {
   digitalWrite(LED_BUILTIN, 0);
   digitalWrite(led, 0);
   server.send(200, "text/plain", "esp8266 turning off!");
+  Serial.println("esp8266 turning off!");
   digitalWrite(LED_BUILTIN, 1);
+}
+
+void handleWifiReset() {
+  server.send(200, "text/plain", "Manually starting configuration portal!");
+  Serial.println("Manually starting configuration portal!");
+  wifiManager.startConfigPortal(wifiName);
+
+  Serial.println("Restarting ESP");
+  ESP.restart();
 }
 
 void handleNotFound(){
@@ -59,17 +73,22 @@ void setup(void){
   digitalWrite(led, 0);
   digitalWrite(LED_BUILTIN, 1);
 
-  Serial.begin(115200);
-  WiFi.begin(ssid, password);
+  Serial.begin(9600);
+  Serial.println("starting");
 
-  WiFi.config(serverip, IPAddress(193, 213, 112, 4), WiFi.gatewayIP(), WiFi.subnetMask());
-  Serial.println("");
+  wifiManager.resetSettings();  // For debugging, only.
 
-  // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
+  // Init Wifi - connect to existing, or configure.
+  wifiManager.setSTAStaticIPConfig(serverip, IPAddress(10,0,0,138), IPAddress(255,255,255,0));
+  wifiManager.setAPStaticIPConfig(serverip, serverip, IPAddress(255,255,255,0));
+
+  //fetches ssid and pass from eeprom and tries to connect
+  //if it does not connect it starts an access point with the specified name
+  //here  "AutoConnectAP"
+  //and goes into a blocking loop awaiting configuration
+  wifiManager.autoConnect(wifiName);
+
+  // Configure server.
   Serial.println("");
   Serial.print("Connected to ");
   Serial.println(ssid);
@@ -83,6 +102,7 @@ void setup(void){
   server.on("/", handleRoot);
   server.on("/on", handleOn);
   server.on("/off", handleOff);
+  server.on("/reset", handleWifiReset);
 
   server.on("/inline", [](){
     digitalWrite(LED_BUILTIN, 0);
